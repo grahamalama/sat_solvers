@@ -6,9 +6,9 @@ from showtime_solver.selector import (
     load_program,
     parse_program,
     write_showtimes,
-    read_showtimes,
     select_interested_movies,
     SHOWTIME_FILE,
+    read_showtimes,
 )
 from showtime_solver.solver import solve
 
@@ -19,9 +19,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip selecting interested movies and keep previous selections.",
     )
+    parser.add_argument(
+        "--refresh-showtimes",
+        action="store_true",
+        help="Re-fetch and re-parse the program, overwriting the CSV.",
+    )
     args = parser.parse_args()
 
-    if not SHOWTIME_FILE.exists():
+    if args.refresh_showtimes or not SHOWTIME_FILE.exists():
         showtimes = parse_program(load_program())
         write_showtimes(showtimes)
 

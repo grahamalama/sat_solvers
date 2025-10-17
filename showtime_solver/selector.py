@@ -5,9 +5,12 @@ import sys
 import textwrap
 from datetime import datetime, timedelta
 
+import attrs
 import questionary
 import requests
 from bs4 import BeautifulSoup
+
+from showtime_solver.models import Showtime
 
 URL = "https://filmadelphia.org/festival/films/"
 HTML_FILE = pathlib.Path("program.html")
@@ -36,14 +39,14 @@ def load_program() -> str:
     return HTML_FILE.read_text()
 
 
-def parse_program(html: str) -> set[tuple]:
+def parse_program(html: str) -> list[Showtime]:
     """Extract movie showtimes from the HTML.
 
     There's a parsing bug somewhere in here, where it double-writes each showtime, but
     I just throw everything into a set since we're not dealing with a ton of data.
     """
     soup = BeautifulSoup(html, "html.parser")
-    shows = set()
+    shows = []
 
     for movie in soup.select(".movie-tags"):
         # Get movie title
@@ -66,9 +69,7 @@ def parse_program(html: str) -> set[tuple]:
                     .strip()
                 )
 
-        showtime_blocks = movie.select(
-            ".flex-wrap.mt-4.md\\:flex, .flex-wrap.-mt-2.md\\:hidden"
-        )
+        showtime_blocks = movie.select(".flex-wrap.mt-4.md\\:flex")
 
         for block in showtime_blocks:
             date = None
@@ -88,17 +89,17 @@ def parse_program(html: str) -> set[tuple]:
                             "%a, %b %d %I:%M%p;%Y",
                         )
                         end_dt = start_dt + timedelta(minutes=runtime_minutes)
-                        row = (
-                            title,
-                            description,
-                            start_dt,
-                            end_dt,
-                            theater,
-                            runtime_minutes,
-                            0,  # not interested
+                        shows.append(
+                            Showtime(
+                                title=title,
+                                description=description,
+                                start_dt=start_dt,
+                                end_dt=end_dt,
+                                theater=theater,
+                                runtime_minutes=runtime_minutes,
+                                interested=False,
+                            )
                         )
-                        shows.add(row)
-
     return shows
 
 
@@ -113,12 +114,12 @@ SHOWTIME_HEADERS = [
 ]
 
 
-def write_showtimes(showtimes):
+def write_showtimes(showtimes: list[Showtime]):
     SHOWTIME_FILE.touch()
     with SHOWTIME_FILE.open("w") as f:
-        writer = csv.writer(f)
-        writer.writerow(SHOWTIME_HEADERS)
-        writer.writerows(showtimes)
+        writer = csv.DictWriter(f, fieldnames=SHOWTIME_HEADERS, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows([attrs.asdict(showtime) for showtime in showtimes])
 
 
 def parse_showtime_csv_row(row):
@@ -133,14 +134,14 @@ def parse_showtime_csv_row(row):
     }
 
 
-def read_showtimes(path: pathlib.Path):
+def read_showtimes(path: pathlib.Path) -> list[Showtime]:
     showtimes = []
     with path.open("r") as f:
         reader = csv.DictReader(f, fieldnames=SHOWTIME_HEADERS)
         next(reader)
         for row in reader:
-            showtime = parse_showtime_csv_row(row)
-            if showtime["interested"]:
+            showtime = Showtime(**row)
+            if showtime.interested:
                 showtimes.append(showtime)
     return showtimes
 
