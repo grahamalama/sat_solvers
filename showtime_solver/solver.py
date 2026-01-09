@@ -28,8 +28,10 @@ THEATER_TRAVEL_TIMES_MINUTES = {
 
 
 def can_go(earlier: Showtime, later: Showtime) -> bool:
-    walk = THEATER_TRAVEL_TIMES_MINUTES[earlier.theater][later.theater]
-    arrival = earlier.end_dt + timedelta(minutes=walk + BUFFER_TIME_MINUTES)
+    walk_duration_minutes = THEATER_TRAVEL_TIMES_MINUTES[earlier.theater][later.theater]
+    arrival = earlier.end_dt + timedelta(
+        minutes=walk_duration_minutes + BUFFER_TIME_MINUTES
+    )
     return arrival <= later.start_dt
 
 
@@ -42,7 +44,6 @@ def solve(shows: list[Showtime]):
     # Precompute infeasible pairs (order-aware: earlier -> later must be possible)
     infeasible_pairs = []
     for a, b in combinations(shows, 2):  # all unique unordered pairs
-        # figure out which starts first
         earlier, later = (a, b) if a.start_dt <= b.start_dt else (b, a)
         if not can_go(earlier, later):
             infeasible_pairs.append((earlier.id, later.id))
@@ -57,11 +58,11 @@ def solve(shows: list[Showtime]):
 
     # Exactly one showing per movie title
     for title, ids in by_title.items():
-        model.add_exactly_one([attend[i] for i in ids])
+        model.add_exactly_one((attend[i] for i in ids))
 
     # Forbid infeasible pairs: never attend both
     for i, j in infeasible_pairs:
-        model.add_at_most_one([attend[i], attend[j]])
+        model.add_at_most_one((attend[i], attend[j]))
 
     # ----------------------
     # SOLVE
