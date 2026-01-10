@@ -5,7 +5,6 @@ A Secret Santa-style music mix exchange where participants can give/receive
 mixes in different formats (USB, CD, or either).
 """
 
-import argparse
 import csv
 from dataclasses import dataclass
 from itertools import permutations
@@ -101,21 +100,3 @@ def solve_exchange(participants: list[Participant]) -> dict[Participant, Partici
         for (giver, receiver), var in pair_vars.items()
         if solver.Value(var) == 1
     }
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Solve a music mix exchange using CP-SAT"
-    )
-    parser.add_argument(
-        "csv_file", type=Path, help="Path to the CSV file containing participant data"
-    )
-    args = parser.parse_args()
-
-    participants = load_participants(args.csv_file)
-    solution = solve_exchange(participants)
-
-    # Print results
-    print("Mix Exchange Solution:")
-    for giver, receiver in solution.items():
-        print(f"  {giver.name} → {receiver.name}")

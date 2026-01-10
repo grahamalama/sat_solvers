@@ -102,7 +102,7 @@ def solve_schedule(showtimes: list[Showtime]) -> list[Showtime] | None:
     for id1, id2 in conflicts:
         model.add_at_most_one([attend[id1], attend[id2]])
 
-    # Solve
+    # Solve (with deterministic settings for reproducibility)
     solver = cp_model.CpSolver()
     solver.parameters.random_seed = 42
     solver.parameters.num_workers = 1
