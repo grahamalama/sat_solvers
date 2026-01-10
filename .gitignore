@@ -1,4 +1,4 @@
 .venv
-program.html
-showtimes.csv*
+showtime_solver/data
+mix_exchange/data
 .DS_STORE
