@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 
-@dataclass
+@dataclass(frozen=True)
 class Showtime:
     """A single movie showing at a specific theater and time."""
 
@@ -17,19 +17,19 @@ class Showtime:
     theater: str
     runtime_minutes: int
     interested: bool
-    id: str = field(init=False)
+    id: str = field(init=False, compare=False, hash=False)
 
     def __post_init__(self):
-        """Generate a unique ID for this showtime."""
-        # Convert string inputs to proper types if needed
+        """Generate a unique ID and convert string inputs to proper types."""
+        # Convert string inputs to proper types if needed (using object.__setattr__ for frozen dataclass)
         if isinstance(self.start_dt, str):
-            self.start_dt = datetime.fromisoformat(self.start_dt)
+            object.__setattr__(self, "start_dt", datetime.fromisoformat(self.start_dt))
         if isinstance(self.end_dt, str):
-            self.end_dt = datetime.fromisoformat(self.end_dt)
+            object.__setattr__(self, "end_dt", datetime.fromisoformat(self.end_dt))
         if isinstance(self.runtime_minutes, str):
-            self.runtime_minutes = int(self.runtime_minutes)
+            object.__setattr__(self, "runtime_minutes", int(self.runtime_minutes))
         if isinstance(self.interested, str):
-            self.interested = bool(int(self.interested))
+            object.__setattr__(self, "interested", bool(int(self.interested)))
 
         # Create unique ID from title and start time
-        self.id = self.title + self.start_dt.isoformat()
+        object.__setattr__(self, "id", self.title + self.start_dt.isoformat())
