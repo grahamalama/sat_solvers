@@ -1,102 +1,109 @@
+"""
+Mix Exchange Solver using OR-Tools CP-SAT
+
+A Secret Santa-style music mix exchange where participants can give/receive
+mixes in different formats (USB, CD, or either).
+"""
+
 import csv
-from collections import defaultdict
-from enum import StrEnum, auto
+from dataclasses import dataclass
 from itertools import permutations
 from pathlib import Path
 
-import attrs
 from ortools.sat.python import cp_model
 
 
-class Format(StrEnum):
-    USB = auto()
-    CD = auto()
-    EITHER = auto()
-
-
-@attrs.define(frozen=True)
+@dataclass(frozen=True)
 class Participant:
     name: str
-    can_give: Format = attrs.field(converter=Format)
-    can_receive: Format = attrs.field(converter=Format)
+    can_give: str
+    can_receive: str
 
 
-def load_participants(csv_path: str | Path) -> list[Participant]:
-    path = Path(csv_path)
-    with path.open("r") as f:
-        reader = csv.DictReader(f)
-        return [Participant(**row) for row in reader]
+def load_participants(csv_path: Path) -> list[Participant]:
+    """Load participants from a CSV file."""
+    with csv_path.open() as f:
+        return [Participant(**row) for row in csv.DictReader(f)]
 
 
-def can_give(p1: Participant, p2: Participant) -> bool:
-    if p1 == p2:
+def can_exchange(giver: Participant, receiver: Participant) -> bool:
+    """Check if a giver can give to a receiver based on format compatibility."""
+    if giver == receiver:
         return False
-    return any(
-        (
-            p1.can_give == Format.EITHER,
-            p2.can_receive == Format.EITHER,
-            p1.can_give == p2.can_receive,
-        )
+
+    # Either party accepts any format, or formats match
+    return (
+        giver.can_give == "either"
+        or receiver.can_receive == "either"
+        or giver.can_give == receiver.can_receive
     )
 
 
-def find_candidates(
-    participants: list[Participant],
-) -> dict[Participant, set[Participant]]:
-    candidates = defaultdict(set)
-    for p1, p2 in permutations(participants, 2):
-        if can_give(p1, p2):
-            candidates[p1].add(p2)
-    return candidates
+def find_valid_pairs(participants: list[Participant]) -> list[tuple[Participant, Participant]]:
+    """Find all valid (giver, receiver) pairs."""
+    return [
+        (p1, p2)
+        for p1, p2 in permutations(participants, 2)
+        if can_exchange(p1, p2)
+    ]
 
 
-def create_match_variables(
-    model: cp_model.CpModel, candidates: dict[Participant, set[Participant]]
-) -> dict[tuple[Participant, Participant], cp_model.IntVar]:
-    """Create boolean variables for each valid (giver, receiver) pair."""
-    variables = {}
-    for giver, receivers in candidates.items():
-        for receiver in receivers:
-            variables[(giver, receiver)] = model.new_bool_var(
-                f"{giver.name}_gives_{receiver.name}"
-            )
-    return variables
+def solve_exchange(participants: list[Participant]) -> dict[Participant, Participant]:
+    """
+    Solve the mix exchange problem using CP-SAT.
 
+    Returns a dict mapping each giver to their receiver.
+    """
+    valid_pairs = find_valid_pairs(participants)
 
-if __name__ == "__main__":
-    script_dir = Path(__file__).parent
-    participants = load_participants(script_dir / "participants.example.csv")
-    candidate_matches = find_candidates(participants)
-
+    # Create the model
     model = cp_model.CpModel()
-    match_variables = create_match_variables(model, candidate_matches)
 
-    # A participant can only give one mix
-    for participant in candidate_matches.keys():
-        gives_to = (
-            var for (giver, _), var in match_variables.items() if giver == participant
-        )
+    # Create a boolean variable for each valid (giver, receiver) pair
+    pair_vars = {
+        (giver, receiver): model.new_bool_var(f"{giver.name}_to_{receiver.name}")
+        for giver, receiver in valid_pairs
+    }
+
+    # Constraint 1: Each participant gives exactly one mix
+    for participant in participants:
+        gives_to = [var for (giver, _), var in pair_vars.items() if giver == participant]
         model.add_exactly_one(gives_to)
 
-    # A participant should only receive one mix
-    for participant in candidate_matches.keys():
-        receives_from = (
-            var
-            for (_, receiver), var in match_variables.items()
-            if receiver == participant
-        )
+    # Constraint 2: Each participant receives exactly one mix
+    for participant in participants:
+        receives_from = [var for (_, receiver), var in pair_vars.items() if receiver == participant]
         model.add_exactly_one(receives_from)
 
-    # prevent pairs (A gives to B and B gives to A)
-    for (giver, receiver), var in match_variables.items():
-        reverse_pair = (receiver, giver)
-        if reverse_pair in match_variables:
-            model.add_at_most_one([var, match_variables[reverse_pair]])
+    # Constraint 3: Prevent direct swaps (A→B and B→A)
+    for (giver, receiver), var in pair_vars.items():
+        reverse = (receiver, giver)
+        if reverse in pair_vars:
+            model.add_at_most_one([var, pair_vars[reverse]])
 
+    # Solve
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
 
-    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        for (giver, receiver), var in match_variables.items():
-            if solver.Value(var) == 1:
-                print(f"{giver.name} gives to {receiver.name}")
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        raise ValueError("No solution found!")
+
+    # Extract solution
+    return {
+        giver: receiver
+        for (giver, receiver), var in pair_vars.items()
+        if solver.Value(var) == 1
+    }
+
+
+if __name__ == "__main__":
+    # Load participants and solve
+    script_dir = Path(__file__).parent
+    participants = load_participants(script_dir / "participants.example.csv")
+
+    solution = solve_exchange(participants)
+
+    # Print results
+    print("Mix Exchange Solution:")
+    for giver, receiver in solution.items():
+        print(f"  {giver.name} → {receiver.name}")
