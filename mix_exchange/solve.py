@@ -81,8 +81,10 @@ def solve_exchange(participants: list[Participant]) -> dict[Participant, Partici
         if reverse in pair_vars:
             model.add_at_most_one([var, pair_vars[reverse]])
 
-    # Solve
+    # Solve (with deterministic settings for reproducibility)
     solver = cp_model.CpSolver()
+    solver.parameters.random_seed = 42
+    solver.parameters.num_workers = 1
     status = solver.Solve(model)
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
