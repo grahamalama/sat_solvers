@@ -1,8 +1,8 @@
 import csv
-from itertools import permutations
-from enum import StrEnum, auto
-from pathlib import Path
 from collections import defaultdict
+from enum import StrEnum, auto
+from itertools import permutations
+from pathlib import Path
 
 import attrs
 from ortools.sat.python import cp_model
@@ -17,8 +17,8 @@ class Format(StrEnum):
 @attrs.define(frozen=True)
 class Participant:
     name: str
-    can_give: Format = attrs.field(converter=lambda v: Format)
-    can_receive: Format = attrs.field(converter=lambda v: Format)
+    can_give: Format = attrs.field(converter=Format)
+    can_receive: Format = attrs.field(converter=Format)
 
 
 def load_participants(csv_path: str | Path) -> list[Participant]:
@@ -28,11 +28,16 @@ def load_participants(csv_path: str | Path) -> list[Participant]:
         return [Participant(**row) for row in reader]
 
 
-def can_give(p1: Participant, p2: Participant):
-    is_not_self = p1 != p2
-    either_is_either = p1.can_give == Format.EITHER or p2.can_receive == Format.EITHER
-    formats_match = p1.can_give == p2.can_receive
-    return all((is_not_self, (either_is_either or formats_match)))
+def can_give(p1: Participant, p2: Participant) -> bool:
+    if p1 == p2:
+        return False
+    return any(
+        (
+            p1.can_give == Format.EITHER,
+            p2.can_receive == Format.EITHER,
+            p1.can_give == p2.can_receive,
+        )
+    )
 
 
 def find_candidates(
@@ -45,16 +50,17 @@ def find_candidates(
     return candidates
 
 
-def create_candidate_variables(
+def create_match_variables(
     model: cp_model.CpModel, candidates: dict[Participant, set[Participant]]
-) -> dict[str, dict[str, cp_model.IntVar]]:
-    candidate_variables = defaultdict(lambda: defaultdict(dict))
+) -> dict[tuple[Participant, Participant], cp_model.IntVar]:
+    """Create boolean variables for each valid (giver, receiver) pair."""
+    variables = {}
     for giver, receivers in candidates.items():
         for receiver in receivers:
-            candidate_variables[giver.name][receiver.name] = model.new_bool_var(
+            variables[(giver, receiver)] = model.new_bool_var(
                 f"{giver.name}_gives_{receiver.name}"
             )
-    return candidate_variables
+    return variables
 
 
 if __name__ == "__main__":
@@ -63,25 +69,34 @@ if __name__ == "__main__":
     candidate_matches = find_candidates(participants)
 
     model = cp_model.CpModel()
-    match_variables = create_candidate_variables(model, candidate_matches)
+    match_variables = create_match_variables(model, candidate_matches)
 
-    # A participate can only give one mix
-    for _giver, receivers in match_variables.items():
-        model.add_exactly_one(receivers.values())
+    # A participant can only give one mix
+    for participant in candidate_matches.keys():
+        gives_to = (
+            var for (giver, _), var in match_variables.items() if giver == participant
+        )
+        model.add_exactly_one(gives_to)
 
-    # A participate should only receive one mix
-    for participant in match_variables.keys():
-        participant_is_receiver = []
-        for _giver, receivers in match_variables.items():
-            if participant in receivers:
-                participant_is_receiver.append(receivers[participant])
-        model.add_exactly_one(participant_is_receiver)
+    # A participant should only receive one mix
+    for participant in candidate_matches.keys():
+        receives_from = (
+            var
+            for (_, receiver), var in match_variables.items()
+            if receiver == participant
+        )
+        model.add_exactly_one(receives_from)
+
+    # prevent pairs (A gives to B and B gives to A)
+    for (giver, receiver), var in match_variables.items():
+        reverse_pair = (receiver, giver)
+        if reverse_pair in match_variables:
+            model.add_at_most_one([var, match_variables[reverse_pair]])
 
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
 
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        for giver, receivers in match_variables.items():
-            for receiver in receivers:
-                if solver.Value(match_variables[giver][receiver]) == 1:
-                    print(f"{giver} gives to {receiver}")
+        for (giver, receiver), var in match_variables.items():
+            if solver.Value(var) == 1:
+                print(f"{giver.name} gives to {receiver.name}")
