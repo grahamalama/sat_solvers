@@ -3,9 +3,9 @@ import pathlib
 import shutil
 import sys
 import textwrap
+from dataclasses import asdict
 from datetime import datetime, timedelta
 
-import attrs
 import questionary
 import requests
 from bs4 import BeautifulSoup
@@ -119,7 +119,7 @@ def write_showtimes(showtimes: list[Showtime]):
     with SHOWTIME_FILE.open("w") as f:
         writer = csv.DictWriter(f, fieldnames=SHOWTIME_HEADERS, extrasaction="ignore")
         writer.writeheader()
-        writer.writerows([attrs.asdict(showtime) for showtime in showtimes])
+        writer.writerows([asdict(showtime) for showtime in showtimes])
 
 
 def parse_showtime_csv_row(row):
