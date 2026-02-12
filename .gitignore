@@ -1,4 +1,5 @@
 .venv
-showtime_solver/data
-mix_exchange/data
 .DS_STORE
+program.html
+_data
+__pycache__

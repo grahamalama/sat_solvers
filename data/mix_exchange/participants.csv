@@ -1,0 +1,11 @@
+name,can_give,can_receive
+Alice,usb,either
+Bob,cd,cd
+Carol,either,usb
+Dan,usb,usb
+Eve,cd,either
+Frank,either,cd
+Grace,usb,cd
+Henry,cd,usb
+Iris,either,either
+Jack,usb,either
