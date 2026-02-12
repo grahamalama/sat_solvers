@@ -1,0 +1,8 @@
+[project]
+name = "sat-solvers"
+version = "0.1.0"
+description = "Constraint programming examples using OR-Tools"
+requires-python = ">=3.8"
+dependencies = [
+    "ortools",
+]
