@@ -1,9 +1,8 @@
 import argparse
-from itertools import batched, product
+from itertools import batched, chain, product
 
 from ortools.sat.python import cp_model
 
-DIGITS = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 EXAMPLE_PUZZLE = (
     "...26.7.168..7..9.19...45..82.1...4...46.29...5...3.28..93...74.4..5..367.3.18..."
 )
@@ -12,24 +11,25 @@ EXAMPLE_PUZZLE = (
 def solve(puzzle_input):
     model = cp_model.CpModel()
 
-    puzzle = {
-        (row, col): model.new_int_var(1, 9, f"r{row}c{col}")
-        for row, col in product(DIGITS, repeat=2)
-    }
+    puzzle = [
+        [model.new_int_var(1, 9, f"r{row}c{col}") for col in range(9)]
+        for row in range(9)
+    ]
 
-    for row in DIGITS:
-        model.add_all_different([puzzle[row, col] for col in DIGITS])
+    for row in puzzle:
+        model.add_all_different(row)
 
-    for col in DIGITS:
-        model.add_all_different([puzzle[row, col] for row in DIGITS])
+    for col in zip(*puzzle):
+        model.add_all_different(col)
 
-    for bands in product(((1, 2, 3), (4, 5, 6), (7, 8, 9)), repeat=2):
-        model.add_all_different([puzzle[cell] for cell in product(*bands)])
+    bands = (0, 1, 2), (3, 4, 5), (6, 7, 8)
+    for rows, cols in product(bands, repeat=2):
+        model.add_all_different([puzzle[row][col] for row in rows for col in cols])
 
-    for row_index, row_chars in enumerate(batched(puzzle_input, 9), start=1):
-        for col_index, char in enumerate(row_chars, start=1):
-            if char.isdigit() and char != "0":
-                model.add(puzzle[row_index, col_index] == int(char))
+    for index, char in enumerate(puzzle_input):
+        if char.isdigit() and char != "0":
+            row, col = divmod(index, 9)
+            model.add(puzzle[row][col] == int(char))
 
     solver = cp_model.CpSolver()
     status = solver.solve(model)
@@ -37,7 +37,9 @@ def solve(puzzle_input):
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise ValueError("No solution found")
 
-    return "".join([str(solver.value(puzzle[cell])) for cell in product(DIGITS, repeat=2)])
+    return "".join(
+        str(solver.value(cell)) for cell in chain.from_iterable(puzzle)
+    )
 
 
 def print_puzzle(puzzle):

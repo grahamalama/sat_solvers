@@ -12,7 +12,7 @@ from ortools.sat.python import cp_model
 class Film:
     title: str
     runtime_minutes: int
-    rank: int
+    weight: int
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,7 @@ class Showing:
             film=Film(
                 title=row["title"],
                 runtime_minutes=int(row["runtime_minutes"]),
-                rank=int(row["rank"]),
+                weight=int(row["weight"]),
             ),
             start_dt=datetime.fromisoformat(row["start_dt"]),
             end_dt=datetime.fromisoformat(row["end_dt"]),
@@ -83,25 +83,20 @@ def solve(showings):
     model = cp_model.CpModel()
 
     attend = {
-        showing: model.new_bool_var(f"attend_{count}")
-        for count, showing in enumerate(showings, start=1)
+        showing: model.new_bool_var(f"attend_{showing.film.title}_{showing.start_dt}")
+        for showing in showings
     }
 
     # Constraint: attend at most one showing per movie
-    by_title = sorted(showings, key=lambda s: s.film.title)
-    for _, options in groupby(by_title, key=lambda s: s.film.title):
+    showings_by_title = sorted(showings, key=lambda s: s.film.title)
+    for _, options in groupby(showings_by_title, key=lambda s: s.film.title):
         model.add_at_most_one([attend[s] for s in options])
 
     # Constraint: can't attend conflicting showings
     for one, other in find_conflicts(showings):
         model.add_at_most_one([attend[one], attend[other]])
 
-    # Objective: maximize weighted sum based on film rankings
-    # Lower rank number = higher priority, so invert the weights
-    max_rank = max(s.film.rank for s in showings)
-    model.maximize(
-        sum((max_rank + 1 - s.film.rank) * attend[s] for s in showings)
-    )
+    model.maximize(sum(s.film.weight * attend[s] for s in showings))
 
     solver = cp_model.CpSolver()
     status = solver.solve(model)
@@ -134,7 +129,8 @@ def print_schedule(schedule, all_showings):
             # Get rank info for dropped films
             dropped_films = sorted(
                 [s.film for s in all_showings if s.film.title in dropped_titles],
-                key=lambda f: f.rank
+                key=lambda f: f.weight,
+                reverse=True,
             )
             # Deduplicate by title (multiple showings per film)
             seen = set()
@@ -146,7 +142,7 @@ def print_schedule(schedule, all_showings):
 
             print(f"\nDropped films ({len(unique_dropped)}):")
             for film in unique_dropped:
-                print(f"  Rank {film.rank}: {film.title}")
+                print(f"  Weight {film.weight}: {film.title}")
     else:
         print("No feasible schedule found.")
 

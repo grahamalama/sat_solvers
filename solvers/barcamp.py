@@ -100,7 +100,7 @@ def solve(
     for _, options in groupby(by_slot, key=lambda s: (s.room, s.timeslot)):
         model.add_at_most_one([scheduled_talks[s] for s in options])
 
-    model.Maximize(
+    model.maximize(
         sum(
             min(st.talk.votes, st.room.capacity) * var
             for (st, var) in scheduled_talks.items()
@@ -112,7 +112,7 @@ def solve(
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise Exception(":(")
 
-    scheduled = [st for (st, var) in scheduled_talks.items() if solver.Value(var) == 1]
+    scheduled = [st for (st, var) in scheduled_talks.items() if solver.value(var)]
     return scheduled
 
 

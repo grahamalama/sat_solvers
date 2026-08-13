@@ -78,13 +78,13 @@ def solve(showings):
     model = cp_model.CpModel()
 
     attend = {
-        showing: model.new_bool_var(f"attend_{count}")
-        for count, showing in enumerate(showings, start=1)
+        showing: model.new_bool_var(f"attend_{showing.film.title}_{showing.start_dt}")
+        for showing in showings
     }
 
     # Constraint: attend exactly one showing per movie
-    by_title = sorted(showings, key=lambda s: s.film.title)
-    for _, options in groupby(by_title, key=lambda s: s.film.title):
+    showings_by_title = sorted(showings, key=lambda s: s.film.title)
+    for _, options in groupby(showings_by_title, key=lambda s: s.film.title):
         model.add_exactly_one([attend[s] for s in options])
 
     # Constraint: can't attend conflicting showings
@@ -92,13 +92,13 @@ def solve(showings):
         model.add_at_most_one([attend[one], attend[other]])
 
     solver = cp_model.CpSolver()
-    status = solver.Solve(model)
+    status = solver.solve(model)
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise Exception("No solution found")
 
     return sorted(
-        [s for s in showings if solver.Value(attend[s])],
+        [s for s in showings if solver.value(attend[s])],
         key=lambda s: s.start_dt,
     )
 

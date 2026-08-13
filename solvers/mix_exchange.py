@@ -41,34 +41,36 @@ def solve(participants):
     model = cp_model.CpModel()
 
     valid_pairs = find_valid_pairs(participants)
-    assign = {pair: model.new_bool_var(f"assign_{i}") for i, pair in enumerate(valid_pairs)}
+    matches = {
+        pair: model.new_bool_var(f"assign_{i}") for i, pair in enumerate(valid_pairs)
+    }
 
     # Constraint: each participant gives exactly one mix
     by_giver = sorted(valid_pairs, key=lambda p: p[0].name)
     for _, options in groupby(by_giver, key=lambda p: p[0]):
-        model.add_exactly_one([assign[pair] for pair in options])
+        model.add_exactly_one([matches[pair] for pair in options])
 
     # Constraint: each participant receives exactly one mix
     by_receiver = sorted(valid_pairs, key=lambda p: p[1].name)
     for _, options in groupby(by_receiver, key=lambda p: p[1]):
-        model.add_exactly_one([assign[pair] for pair in options])
+        model.add_exactly_one([matches[pair] for pair in options])
 
     # Constraint: no direct swaps (A→B and B→A)
     for pair in valid_pairs:
         reverse = (pair[1], pair[0])
-        if reverse in assign:
-            model.add_at_most_one([assign[pair], assign[reverse]])
+        if reverse in matches:
+            model.add_at_most_one([matches[pair], matches[reverse]])
 
     solver = cp_model.CpSolver()
-    status = solver.Solve(model)
+    status = solver.solve(model)
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return None
 
     return {
         giver: receiver
-        for (giver, receiver), var in assign.items()
-        if solver.Value(var)
+        for (giver, receiver), var in matches.items()
+        if solver.value(var)
     }
 
 
